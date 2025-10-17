@@ -33,14 +33,14 @@ export function MatchingSystem({
   const [isMatching, setIsMatching] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const generateMatches = (playerList: Player[]): Match[] => {
+  const generateMatches = (playerList: Player[]): Omit<Match, 'id' | 'created_at'>[] => {
     if (playerList.length < 2) {
       throw new Error('Need at least 2 players to create matches')
     }
 
     // Create a shuffled copy of players
     const shuffled = [...playerList].sort(() => Math.random() - 0.5)
-    const matches: Match[] = []
+    const matches: Omit<Match, 'id' | 'created_at'>[] = []
 
     // Create circular matching (A gives to B, B gives to C, C gives to A)
     for (let i = 0; i < shuffled.length; i++) {
@@ -48,6 +48,7 @@ export function MatchingSystem({
       const receiver = shuffled[(i + 1) % shuffled.length] // Wrap around to first player
       
       matches.push({
+        game_id: gameId,
         giver_id: giver.id,
         receiver_id: receiver.id,
         giver_name: giver.name,
