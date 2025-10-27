@@ -5,8 +5,19 @@ import { createClientSideSupabaseClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Shuffle, Users, Gift } from 'lucide-react'
-import { Match } from '@/lib/supabase'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Shuffle, Users, Gift, RotateCcw } from 'lucide-react'
+import { Match, MatchingRule } from '@/lib/supabase'
 
 interface Player {
   id: string
@@ -19,7 +30,9 @@ interface MatchingSystemProps {
   isHost: boolean
   isMatched: boolean
   matches?: Match[]
+  rules?: MatchingRule[]
   onMatchComplete: () => void
+  onResetComplete?: () => void
 }
 
 export function MatchingSystem({ 
@@ -28,9 +41,12 @@ export function MatchingSystem({
   isHost, 
   isMatched, 
   matches = [], 
-  onMatchComplete 
+  rules = [],
+  onMatchComplete,
+  onResetComplete
 }: MatchingSystemProps) {
   const [isMatching, setIsMatching] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const generateMatches = (playerList: Player[]): Omit<Match, 'id' | 'created_at'>[] => {
@@ -38,25 +54,77 @@ export function MatchingSystem({
       throw new Error('Need at least 2 players to create matches')
     }
 
-    // Create a shuffled copy of players
-    const shuffled = [...playerList].sort(() => Math.random() - 0.5)
-    const matches: Omit<Match, 'id' | 'created_at'>[] = []
+    // Create a set of forbidden matches from rules
+    const forbiddenMatches = new Set<string>()
+    rules.forEach(rule => {
+      forbiddenMatches.add(`${rule.giver_id}-${rule.receiver_id}`)
+    })
 
-    // Create circular matching (A gives to B, B gives to C, C gives to A)
-    for (let i = 0; i < shuffled.length; i++) {
-      const giver = shuffled[i]
-      const receiver = shuffled[(i + 1) % shuffled.length] // Wrap around to first player
-      
-      matches.push({
-        game_id: gameId,
-        giver_id: giver.id,
-        receiver_id: receiver.id,
-        giver_name: giver.name,
-        receiver_name: receiver.name
-      })
+    // Helper function to check if a match is forbidden
+    const isForbidden = (giverId: string, receiverId: string): boolean => {
+      return forbiddenMatches.has(`${giverId}-${receiverId}`)
     }
 
-    return matches
+    // Helper function to check if a complete matching is valid
+    const isValidMatching = (matches: { giver_id: string; receiver_id: string }[]): boolean => {
+      // Check for forbidden matches
+      for (const match of matches) {
+        if (isForbidden(match.giver_id, match.receiver_id)) {
+          return false
+        }
+      }
+      return true
+    }
+
+    // Try to generate a valid matching using backtracking
+    const generateValidMatching = (): Omit<Match, 'id' | 'created_at'>[] | null => {
+      const maxAttempts = 1000 // Prevent infinite loops
+      let attempts = 0
+
+      while (attempts < maxAttempts) {
+        attempts++
+        
+        // Create a shuffled copy of players
+        const shuffled = [...playerList].sort(() => Math.random() - 0.5)
+        const matches: Omit<Match, 'id' | 'created_at'>[] = []
+        let valid = true
+
+        // Try to create matches
+        for (let i = 0; i < shuffled.length; i++) {
+          const giver = shuffled[i]
+          const receiver = shuffled[(i + 1) % shuffled.length]
+          
+          // Check if this match is forbidden
+          if (isForbidden(giver.id, receiver.id)) {
+            valid = false
+            break
+          }
+          
+          matches.push({
+            game_id: gameId,
+            giver_id: giver.id,
+            receiver_id: receiver.id,
+            giver_name: giver.name,
+            receiver_name: receiver.name
+          })
+        }
+
+        if (valid && isValidMatching(matches)) {
+          return matches
+        }
+      }
+
+      return null
+    }
+
+    // Try to generate a valid matching
+    const validMatches = generateValidMatching()
+    
+    if (!validMatches) {
+      throw new Error('Unable to create valid matches with the current rules. Consider removing some restrictions.')
+    }
+
+    return validMatches
   }
 
   const handleMatchPlayers = async () => {
@@ -95,6 +163,32 @@ export function MatchingSystem({
     }
   }
 
+  const handleResetMatches = async () => {
+    setIsResetting(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/games/${gameId}/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to reset matches')
+      }
+
+      onResetComplete?.() || onMatchComplete()
+    } catch (err) {
+      console.error('Error resetting matches:', err)
+      setError(err instanceof Error ? err.message : 'Failed to reset matches')
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
   const getMyMatch = (userId: string): Match | undefined => {
     return matches.find(match => match.giver_id === userId)
   }
@@ -130,17 +224,58 @@ export function MatchingSystem({
             </p>
             
             {isHost && (
-              <div className="bg-muted p-4 rounded-lg">
-                <h4 className="font-medium mb-2">Host View - All Matches:</h4>
-                <div className="space-y-2">
-                  {matches.map((match, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{match.giver_name}</span>
-                      <span className="text-muted-foreground">gives to</span>
-                      <span className="font-medium">{match.receiver_name}</span>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-medium mb-2">Host View - All Matches:</h4>
+                  <div className="space-y-2">
+                    {matches.map((match, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm">
+                        <span className="font-medium">{match.giver_name}</span>
+                        <span className="text-muted-foreground">gives to</span>
+                        <span className="font-medium">{match.receiver_name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+                
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button 
+                      disabled={isResetting}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Reset Matches
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset Secret Santa Matches?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will delete all current matches and allow you to create new ones. 
+                        All players will lose their current assignments.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleResetMatches}
+                        disabled={isResetting}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {isResetting ? (
+                          <>
+                            <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                            Resetting...
+                          </>
+                        ) : (
+                          'Reset Matches'
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             )}
           </div>
@@ -166,6 +301,9 @@ export function MatchingSystem({
             <div className="flex items-center gap-2 mt-2">
               <Badge variant="outline">{players.length} players</Badge>
               <Badge variant="secondary">Random matching</Badge>
+              {rules.length > 0 && (
+                <Badge variant="destructive">{rules.length} rule{rules.length !== 1 ? 's' : ''}</Badge>
+              )}
             </div>
           </div>
         </div>

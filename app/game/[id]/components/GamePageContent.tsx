@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { PlayerList } from '@/app/game/[id]/components/PlayerList'
 import { MatchingSystem } from '@/app/game/[id]/components/MatchingSystem'
+import { MatchingRules } from '@/app/game/[id]/components/MatchingRules'
 import { MyMatch } from '@/app/game/[id]/components/MyMatch'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
@@ -19,7 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Trash2 } from 'lucide-react'
-import { Game, Match } from '@/lib/supabase'
+import { Game, Match, MatchingRule } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
@@ -35,6 +36,7 @@ export function GamePageContent({ game, isHost }: GamePageContentProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [players, setPlayers] = useState<{id: string, name: string}[]>([])
   const [matches, setMatches] = useState<Match[]>([])
+  const [rules, setRules] = useState<MatchingRule[]>([])
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
@@ -88,6 +90,29 @@ export function GamePageContent({ game, isHost }: GamePageContentProps) {
             setMatches(transformedMatches)
           }
         }
+
+        // Fetch matching rules
+        const { data: rulesData, error: rulesError } = await supabase
+          .from('matching_rules')
+          .select(`
+            *,
+            giver:profiles!matching_rules_giver_id_fkey(name),
+            receiver:profiles!matching_rules_receiver_id_fkey(name)
+          `)
+          .eq('game_id', game.id)
+          .order('created_at', { ascending: false })
+
+        if (rulesError) {
+          console.error('Error fetching rules:', rulesError)
+        } else {
+          // Transform the data to include names
+          const transformedRules = rulesData?.map(rule => ({
+            ...rule,
+            giver_name: rule.giver?.name,
+            receiver_name: rule.receiver?.name
+          })) || []
+          setRules(transformedRules)
+        }
       } catch (error) {
         console.error('Error fetching players:', error)
       } finally {
@@ -122,6 +147,41 @@ export function GamePageContent({ game, isHost }: GamePageContentProps) {
   const handleMatchComplete = () => {
     // Refresh the page to show updated game data
     window.location.reload()
+  }
+
+  const handleResetComplete = () => {
+    // Refresh the page to show updated game data after reset
+    window.location.reload()
+  }
+
+  const handleRulesChange = () => {
+    // Refresh rules data
+    const fetchRules = async () => {
+      try {
+        const supabase = createClientSideSupabaseClient()
+        const { data: rulesData, error: rulesError } = await supabase
+          .from('matching_rules')
+          .select(`
+            *,
+            giver:profiles!matching_rules_giver_id_fkey(name),
+            receiver:profiles!matching_rules_receiver_id_fkey(name)
+          `)
+          .eq('game_id', game.id)
+          .order('created_at', { ascending: false })
+
+        if (!rulesError && rulesData) {
+          const transformedRules = rulesData.map(rule => ({
+            ...rule,
+            giver_name: rule.giver?.name,
+            receiver_name: rule.receiver?.name
+          }))
+          setRules(transformedRules)
+        }
+      } catch (error) {
+        console.error('Error refreshing rules:', error)
+      }
+    }
+    fetchRules()
   }
 
   return (
@@ -195,6 +255,18 @@ export function GamePageContent({ game, isHost }: GamePageContentProps) {
         </CardContent>
       </Card>
 
+      {/* Matching Rules - Only show to host before matching */}
+      {!isLoadingPlayers && isHost && !game.is_matched && (
+        <div className="mt-6">
+          <MatchingRules
+            gameId={game.id}
+            players={players}
+            isHost={isHost}
+            onRulesChange={handleRulesChange}
+          />
+        </div>
+      )}
+
       {/* Matching System */}
       {!isLoadingPlayers && (
         <div className="mt-6">
@@ -204,7 +276,9 @@ export function GamePageContent({ game, isHost }: GamePageContentProps) {
             isHost={isHost}
             isMatched={game.is_matched || false}
             matches={matches}
+            rules={rules}
             onMatchComplete={handleMatchComplete}
+            onResetComplete={handleResetComplete}
           />
         </div>
       )}

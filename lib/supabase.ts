@@ -37,6 +37,17 @@ export interface Profile {
   created_at: string
 }
 
+export interface MatchingRule {
+  id: string
+  game_id: string
+  giver_id: string
+  receiver_id: string
+  created_at: string
+  // Joined fields (not in database)
+  giver_name?: string
+  receiver_name?: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -54,6 +65,11 @@ export type Database = {
         Row: Profile
         Insert: Omit<Profile, 'id' | 'created_at'>
         Update: Partial<Omit<Profile, 'id' | 'created_at'>>
+      }
+      matching_rules: {
+        Row: MatchingRule
+        Insert: Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>
+        Update: Partial<Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>>
       }
     }
   }
