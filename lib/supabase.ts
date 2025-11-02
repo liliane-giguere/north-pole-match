@@ -48,6 +48,14 @@ export interface MatchingRule {
   receiver_name?: string
 }
 
+export interface WishlistItem {
+  id: string
+  game_id: string
+  owner_id: string
+  content: string
+  created_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -70,6 +78,11 @@ export type Database = {
         Row: MatchingRule
         Insert: Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>
         Update: Partial<Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>>
+      }
+      wishlists: {
+        Row: WishlistItem
+        Insert: Omit<WishlistItem, 'id' | 'created_at'>
+        Update: Partial<Omit<WishlistItem, 'id' | 'created_at'>>
       }
     }
   }

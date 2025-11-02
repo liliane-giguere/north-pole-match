@@ -56,6 +56,52 @@ CREATE POLICY "Only host can delete matches" ON matches
     )
   );
 
+-- Create wishlists table (one row per wishlist item)
+CREATE TABLE IF NOT EXISTS wishlists (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  owner_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_wishlists_game_id ON wishlists(game_id);
+CREATE INDEX IF NOT EXISTS idx_wishlists_owner_id ON wishlists(owner_id);
+
+-- Enable Row Level Security
+ALTER TABLE wishlists ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+-- Owners can insert their own wishlist items
+CREATE POLICY "Owners can insert wishlist items" ON wishlists
+  FOR INSERT WITH CHECK (owner_id = auth.uid());
+
+-- Owners can select their wishlist items
+CREATE POLICY "Owners can select wishlist items" ON wishlists
+  FOR SELECT USING (owner_id = auth.uid());
+
+-- Matched givers can view their recipient's wishlist
+-- A user can select wishlist items where there exists a match row in the same game
+-- such that the user is the giver and the wishlist owner is the receiver
+CREATE POLICY "Givers can view recipient wishlist" ON wishlists
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM matches m
+      WHERE m.game_id = wishlists.game_id
+        AND m.giver_id = auth.uid()
+        AND m.receiver_id = wishlists.owner_id
+    )
+  );
+
+-- Owners can update their own wishlist items
+CREATE POLICY "Owners can update wishlist items" ON wishlists
+  FOR UPDATE USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+
+-- Owners can delete their own wishlist items
+CREATE POLICY "Owners can delete wishlist items" ON wishlists
+  FOR DELETE USING (owner_id = auth.uid());
+
 -- Create matching_rules table
 CREATE TABLE IF NOT EXISTS matching_rules (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
