@@ -42,6 +42,7 @@ export interface MatchingRule {
   game_id: string
   giver_id: string
   receiver_id: string
+  rule_type: 'cannot' | 'must'
   created_at: string
   // Joined fields (not in database)
   giver_name?: string
@@ -76,7 +77,7 @@ export type Database = {
       }
       matching_rules: {
         Row: MatchingRule
-        Insert: Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>
+        Insert: Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'> & { rule_type?: 'cannot' | 'must' }
         Update: Partial<Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>>
       }
       wishlists: {

@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS matching_rules (
   game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
   giver_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   receiver_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  rule_type TEXT NOT NULL DEFAULT 'cannot' CHECK (rule_type IN ('cannot', 'must')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
   -- Ensure no one is restricted from giving to themselves
@@ -116,6 +117,26 @@ CREATE TABLE IF NOT EXISTS matching_rules (
   -- Ensure unique rule per giver-receiver pair per game
   UNIQUE(game_id, giver_id, receiver_id)
 );
+
+-- Add rule_type column to existing tables (for migration)
+ALTER TABLE matching_rules 
+ADD COLUMN IF NOT EXISTS rule_type TEXT DEFAULT 'cannot';
+
+-- Ensure rule_type constraint
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'matching_rules_rule_type_check'
+  ) THEN
+    ALTER TABLE matching_rules 
+    ADD CONSTRAINT matching_rules_rule_type_check 
+    CHECK (rule_type IN ('cannot', 'must'));
+  END IF;
+END $$;
+
+-- Update existing rows to have 'cannot' as default if null
+UPDATE matching_rules SET rule_type = 'cannot' WHERE rule_type IS NULL;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_matching_rules_game_id ON matching_rules(game_id);

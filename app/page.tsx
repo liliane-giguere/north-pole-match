@@ -13,7 +13,7 @@ export default function Home() {
         <div className="container px-4 md:px-6 mx-auto">
           <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-12">
             <div className="space-y-4 text-center lg:text-left lg:w-1/2">
-              <Badge className="mb-2 animate-pulse" variant="outline">Holiday 2023</Badge>
+              <Badge className="mb-2 animate-pulse" variant="outline">Holiday 2025</Badge>
               <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl/none bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-green-600">
                 North Pole Match
               </h1>

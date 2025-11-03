@@ -54,10 +54,19 @@ export function MatchingSystem({
       throw new Error('Need at least 2 players to create matches')
     }
 
-    // Create a set of forbidden matches from rules
+    // Separate rules by type
+    const mustRules = rules.filter(r => r.rule_type === 'must')
+    const cannotRules = rules.filter(r => r.rule_type === 'cannot')
+
+    // Create sets for quick lookup
     const forbiddenMatches = new Set<string>()
-    rules.forEach(rule => {
+    cannotRules.forEach(rule => {
       forbiddenMatches.add(`${rule.giver_id}-${rule.receiver_id}`)
+    })
+
+    const requiredMatches = new Map<string, string>() // giver_id -> receiver_id
+    mustRules.forEach(rule => {
+      requiredMatches.set(rule.giver_id, rule.receiver_id)
     })
 
     // Helper function to check if a match is forbidden
@@ -65,48 +74,122 @@ export function MatchingSystem({
       return forbiddenMatches.has(`${giverId}-${receiverId}`)
     }
 
-    // Helper function to check if a complete matching is valid
-    const isValidMatching = (matches: { giver_id: string; receiver_id: string }[]): boolean => {
-      // Check for forbidden matches
-      for (const match of matches) {
-        if (isForbidden(match.giver_id, match.receiver_id)) {
+    // Helper function to check if all required matches are present
+    const hasAllRequiredMatches = (matches: { giver_id: string; receiver_id: string }[]): boolean => {
+      for (const [giverId, requiredReceiverId] of Array.from(requiredMatches.entries())) {
+        const found = matches.find(m => m.giver_id === giverId && m.receiver_id === requiredReceiverId)
+        if (!found) {
           return false
         }
       }
       return true
     }
 
+    // Helper function to check if a complete matching is valid
+    const isValidMatching = (matches: { giver_id: string; receiver_id: string }[]): boolean => {
+      // Check that every player is giver exactly once
+      const giverIds = matches.map(m => m.giver_id)
+      if (new Set(giverIds).size !== playerList.length || giverIds.length !== playerList.length) {
+        return false
+      }
+
+      // Check that every player is receiver exactly once
+      const receiverIds = matches.map(m => m.receiver_id)
+      if (new Set(receiverIds).size !== playerList.length || receiverIds.length !== playerList.length) {
+        return false
+      }
+
+      // Check for forbidden matches
+      for (const match of matches) {
+        if (isForbidden(match.giver_id, match.receiver_id)) {
+          return false
+        }
+      }
+
+      // Check that all required matches are present
+      if (!hasAllRequiredMatches(matches)) {
+        return false
+      }
+
+      return true
+    }
+
     // Try to generate a valid matching using backtracking
     const generateValidMatching = (): Omit<Match, 'id' | 'created_at'>[] | null => {
-      const maxAttempts = 1000 // Prevent infinite loops
+      const maxAttempts = 5000 // Increased for more complex matching
       let attempts = 0
 
       while (attempts < maxAttempts) {
         attempts++
         
-        // Create a shuffled copy of players
-        const shuffled = [...playerList].sort(() => Math.random() - 0.5)
+        // Start with required matches
         const matches: Omit<Match, 'id' | 'created_at'>[] = []
-        let valid = true
+        const usedGivers = new Set<string>()
+        const usedReceivers = new Set<string>()
 
-        // Try to create matches
-        for (let i = 0; i < shuffled.length; i++) {
-          const giver = shuffled[i]
-          const receiver = shuffled[(i + 1) % shuffled.length]
+        // First, add all required matches
+        for (const [giverId, receiverId] of Array.from(requiredMatches.entries())) {
+          const giver = playerList.find(p => p.id === giverId)
+          const receiver = playerList.find(p => p.id === receiverId)
           
-          // Check if this match is forbidden
-          if (isForbidden(giver.id, receiver.id)) {
-            valid = false
-            break
+          if (!giver || !receiver) {
+            continue // Skip if player not found
           }
+
+          usedGivers.add(giverId)
+          usedReceivers.add(receiverId)
           
           matches.push({
             game_id: gameId,
-            giver_id: giver.id,
-            receiver_id: receiver.id,
+            giver_id: giverId,
+            receiver_id: receiverId,
             giver_name: giver.name,
             receiver_name: receiver.name
           })
+        }
+
+        // Then, fill in remaining players randomly
+        const remainingGivers = playerList.filter(p => !usedGivers.has(p.id))
+        const remainingReceivers = playerList.filter(p => !usedReceivers.has(p.id))
+
+        // Shuffle remaining receivers
+        const shuffledReceivers = [...remainingReceivers].sort(() => Math.random() - 0.5)
+
+        // Try to match remaining players
+        let valid = true
+        for (let i = 0; i < remainingGivers.length; i++) {
+          const giver = remainingGivers[i]
+          
+          // Find a valid receiver for this giver
+          let foundReceiver = false
+          for (const receiver of shuffledReceivers) {
+            // Check if this receiver is already used
+            if (usedReceivers.has(receiver.id)) {
+              continue
+            }
+
+            // Check if this match is forbidden
+            if (isForbidden(giver.id, receiver.id)) {
+              continue
+            }
+
+            // Found a valid match!
+            usedReceivers.add(receiver.id)
+            matches.push({
+              game_id: gameId,
+              giver_id: giver.id,
+              receiver_id: receiver.id,
+              giver_name: giver.name,
+              receiver_name: receiver.name
+            })
+            foundReceiver = true
+            break
+          }
+
+          if (!foundReceiver) {
+            valid = false
+            break
+          }
         }
 
         if (valid && isValidMatching(matches)) {
@@ -121,7 +204,7 @@ export function MatchingSystem({
     const validMatches = generateValidMatching()
     
     if (!validMatches) {
-      throw new Error('Unable to create valid matches with the current rules. Consider removing some restrictions.')
+      throw new Error('Unable to create valid matches with the current rules. Consider removing some restrictions or required matches.')
     }
 
     return validMatches
@@ -140,6 +223,13 @@ export function MatchingSystem({
       // Generate matches
       const newMatches = generateMatches(players)
       
+      console.log('Generated matches:', newMatches)
+      
+      // Validate matches before sending
+      if (!newMatches || newMatches.length === 0) {
+        throw new Error('No matches were generated')
+      }
+
       // Call the API endpoint to update matches
       const response = await fetch(`/api/games/${gameId}/match`, {
         method: 'POST',
@@ -150,14 +240,24 @@ export function MatchingSystem({
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create matches')
+        let errorMessage = 'Failed to create matches'
+        try {
+          const data = await response.json()
+          errorMessage = data.error || errorMessage
+          if (data.details) {
+            errorMessage += `: ${data.details}`
+          }
+        } catch (e) {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`
+        }
+        throw new Error(errorMessage)
       }
 
       onMatchComplete()
     } catch (err) {
       console.error('Error creating matches:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create matches')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create matches'
+      setError(errorMessage)
     } finally {
       setIsMatching(false)
     }

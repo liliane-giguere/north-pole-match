@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientSideSupabaseClient } from '@/lib/supabase'
+import { createClientSideSupabaseClient, MatchingRule } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,17 +12,6 @@ import { Settings, Plus, X, AlertTriangle, CheckCircle } from 'lucide-react'
 interface Player {
   id: string
   name: string
-}
-
-interface MatchingRule {
-  id: string
-  game_id: string
-  giver_id: string
-  receiver_id: string
-  created_at: string
-  // Joined fields
-  giver_name?: string
-  receiver_name?: string
 }
 
 interface MatchingRulesProps {
@@ -42,7 +31,7 @@ export function MatchingRules({
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [newRule, setNewRule] = useState({ giver_id: '', receiver_id: '' })
+  const [newRule, setNewRule] = useState({ giver_id: '', receiver_id: '', rule_type: 'cannot' as 'cannot' | 'must' })
 
   const supabase = createClientSideSupabaseClient()
 
@@ -70,11 +59,12 @@ export function MatchingRules({
         return
       }
 
-      const rulesWithNames = data?.map(rule => ({
+      const rulesWithNames = (data?.map(rule => ({
         ...rule,
         giver_name: rule.giver?.name,
-        receiver_name: rule.receiver?.name
-      })) || []
+        receiver_name: rule.receiver?.name,
+        rule_type: (rule.rule_type || 'cannot') as 'cannot' | 'must'
+      })) || []) as MatchingRule[]
 
       setRules(rulesWithNames)
     } catch (err) {
@@ -92,7 +82,7 @@ export function MatchingRules({
     }
 
     if (newRule.giver_id === newRule.receiver_id) {
-      setError('A person cannot be restricted from giving to themselves')
+      setError('A person cannot be matched with themselves')
       return
     }
 
@@ -115,7 +105,8 @@ export function MatchingRules({
         .insert({
           game_id: gameId,
           giver_id: newRule.giver_id,
-          receiver_id: newRule.receiver_id
+          receiver_id: newRule.receiver_id,
+          rule_type: newRule.rule_type
         })
         .select(`
           *,
@@ -137,7 +128,7 @@ export function MatchingRules({
       }
 
       setRules(prev => [ruleWithNames, ...prev])
-      setNewRule({ giver_id: '', receiver_id: '' })
+      setNewRule({ giver_id: '', receiver_id: '', rule_type: 'cannot' })
       onRulesChange?.()
     } catch (err) {
       console.error('Error adding rule:', err)
@@ -200,7 +191,7 @@ export function MatchingRules({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-sm text-muted-foreground">
-          Set up restrictions for the Secret Santa matching. For example, prevent family members from giving to each other.
+          Set up rules for the Secret Santa matching. Choose "Cannot" to prevent certain matches, or "Must" to require specific matches.
         </div>
 
         {error && (
@@ -215,6 +206,34 @@ export function MatchingRules({
         {/* Add new rule form */}
         <div className="space-y-3 p-4 bg-muted rounded-lg">
           <h4 className="font-medium text-sm">Add New Rule</h4>
+          
+          {/* Rule type selector */}
+          <div>
+            <Label className="text-xs mb-2 block">Rule Type</Label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="cannot"
+                  checked={newRule.rule_type === 'cannot'}
+                  onChange={(e) => setNewRule(prev => ({ ...prev, rule_type: e.target.value as 'cannot' | 'must' }))}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm">Cannot (prevent this match)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  value="must"
+                  checked={newRule.rule_type === 'must'}
+                  onChange={(e) => setNewRule(prev => ({ ...prev, rule_type: e.target.value as 'cannot' | 'must' }))}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm">Must (require this match)</span>
+              </label>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="giver-select" className="text-xs">Giver</Label>
@@ -233,7 +252,9 @@ export function MatchingRules({
               </select>
             </div>
             <div>
-              <Label htmlFor="receiver-select" className="text-xs">Cannot give to</Label>
+              <Label htmlFor="receiver-select" className="text-xs">
+                {newRule.rule_type === 'cannot' ? 'Cannot give to' : 'Must give to'}
+              </Label>
               <select
                 id="receiver-select"
                 value={newRule.receiver_id}
@@ -270,10 +291,19 @@ export function MatchingRules({
           ) : (
             <div className="space-y-2">
               {rules.map((rule) => (
-                <div key={rule.id} className="flex items-center justify-between p-3 bg-background border rounded-lg">
+                <div key={rule.id} className={`flex items-center justify-between p-3 border rounded-lg ${
+                  rule.rule_type === 'must' 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-background'
+                }`}>
                   <div className="flex items-center gap-2 text-sm">
+                    <Badge variant={rule.rule_type === 'must' ? 'default' : 'destructive'} className="text-xs">
+                      {rule.rule_type === 'must' ? 'MUST' : 'CANNOT'}
+                    </Badge>
                     <span className="font-medium">{rule.giver_name}</span>
-                    <span className="text-muted-foreground">cannot give to</span>
+                    <span className="text-muted-foreground">
+                      {rule.rule_type === 'must' ? 'must give to' : 'cannot give to'}
+                    </span>
                     <span className="font-medium">{rule.receiver_name}</span>
                   </div>
                   <Button
