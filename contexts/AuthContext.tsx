@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClientSideSupabaseClient } from '@/lib/supabase'
 
 const AuthContext = createContext<{
   isLoggedIn: boolean;
@@ -12,7 +12,7 @@ const AuthContext = createContext<{
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = createClientComponentClient()
+  const supabase = createClientSideSupabaseClient()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 

@@ -1,35 +1,29 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import GameContent from '@/app/game/GameContent'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 // Force the page to be rendered dynamically because it depends on being logged in
 export const dynamic = 'force-dynamic'
 
 export default async function GamePage() {
-  // Create the Supabase client using the new `cookies` API
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
 
-  // Fetch the user's session
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  // Redirect to the homepage if no session exists
-  if (!session) {
+  if (!user) {
     redirect('/')
   }
 
-  // Fetch games for the logged-in user
   const { data: games, error } = await supabase
     .from('games')
     .select('*')
-    .or(`host_id.eq.${session.user.id},participants.cs.{"${session.user.id}"}`)
+    .or(`host_id.eq.${user.id},participants.cs.{"${user.id}"}`)
 
   if (error) {
     console.error('Error fetching games:', error)
   }
 
-  // Pass data to the component
-  return <GameContent initialGames={games || []} userId={session.user.id} />
+  return <GameContent initialGames={games || []} userId={user.id} />
 }

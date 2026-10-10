@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClientSideSupabaseClient } from '@/lib/supabase'
 import { GameList } from '@/app/game/GameList'
 import CreateGameForm from '@/app/game/CreateGameForm'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
@@ -16,7 +16,7 @@ interface GameContentProps {
 export default function GameContent({ initialGames, userId }: GameContentProps) {
   const [games, setGames] = useState<Game[]>(initialGames)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const supabase = createClientComponentClient()
+  const supabase = createClientSideSupabaseClient()
 
   useEffect(() => {
     const channel = supabase

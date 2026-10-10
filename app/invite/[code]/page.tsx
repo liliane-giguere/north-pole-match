@@ -1,6 +1,5 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -10,21 +9,18 @@ export default async function InvitePage({
 }: {
   params: { code: string }
 }) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
 
-  // Check if user is logged in
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!session) {
-    // If not logged in, redirect to login page with return URL
+  if (!user) {
     const returnUrl = `/invite/${params.code}`
     redirect(`/?returnUrl=${encodeURIComponent(returnUrl)}`)
   }
   console.log("finding game by code", params.code)
 
-  // Find the game with this invite code
   const { data: game, error: gameError } = await supabase
     .from('games')
     .select('*')
@@ -36,12 +32,11 @@ export default async function InvitePage({
     redirect('/game?error=invalid-invite')
   }
 
-  // Add user to participants if not already present
-  if (!game.participants.includes(session.user.id)) {
+  if (!game.participants.includes(user.id)) {
     const { error: updateError } = await supabase
       .from('games')
       .update({
-        participants: [...game.participants, session.user.id]
+        participants: [...game.participants, user.id]
       })
       .eq('invite_code', params.code)  
       .select()

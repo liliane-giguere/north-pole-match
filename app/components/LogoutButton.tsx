@@ -1,13 +1,13 @@
 'use client'
 
 import { useAuth } from "@/contexts/AuthContext"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createClientSideSupabaseClient } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export default function LogoutButton() {
     const router = useRouter()
-    const supabase = createClientComponentClient()
+    const supabase = createClientSideSupabaseClient()
     const { isLoggedIn, isLoading } = useAuth()
 
     const handleLogout = async () => {

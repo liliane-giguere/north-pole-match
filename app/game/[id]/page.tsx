@@ -1,7 +1,6 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { GamePageContent } from '@/app/game/[id]/components/GamePageContent'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,18 +9,16 @@ export default async function GamePage({
 }: {
   params: { id: string }
 }) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = createServerSupabaseClient()
 
-  // Check if user is logged in
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!session) {
+  if (!user) {
     redirect('/')
   }
 
-  // Fetch the specific game
   const { data: game, error } = await supabase
     .from('games')
     .select('*')
@@ -33,9 +30,8 @@ export default async function GamePage({
     redirect('/game?error=not-found')
   }
 
-  // Check if user has access to this game
-  const isParticipant = game.participants.includes(session.user.id)
-  const isHost = game.host_id === session.user.id
+  const isParticipant = game.participants.includes(user.id)
+  const isHost = game.host_id === user.id
 
   if (!isParticipant && !isHost) {
     redirect('/game?error=access-denied')

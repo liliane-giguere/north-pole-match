@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -64,31 +64,49 @@ export type Database = {
         Row: Game
         Insert: Omit<Game, 'id' | 'created_at'>
         Update: Partial<Omit<Game, 'id' | 'created_at'>>
+        Relationships: []
       }
       matches: {
         Row: Match
         Insert: Omit<Match, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>
         Update: Partial<Omit<Match, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>>
+        Relationships: []
       }
       profiles: {
         Row: Profile
         Insert: Omit<Profile, 'id' | 'created_at'>
         Update: Partial<Omit<Profile, 'id' | 'created_at'>>
+        Relationships: []
       }
       matching_rules: {
         Row: MatchingRule
         Insert: Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'> & { rule_type?: 'cannot' | 'must' }
         Update: Partial<Omit<MatchingRule, 'id' | 'created_at' | 'giver_name' | 'receiver_name'>>
+        Relationships: []
       }
       wishlists: {
         Row: WishlistItem
         Insert: Omit<WishlistItem, 'id' | 'created_at'>
         Update: Partial<Omit<WishlistItem, 'id' | 'created_at'>>
+        Relationships: []
       }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl!, supabaseAnonKey!)
 
-export const createClientSideSupabaseClient = () => createClientComponentClient<Database>()
+export const createClientSideSupabaseClient = () =>
+  createBrowserClient(supabaseUrl!, supabaseAnonKey!)

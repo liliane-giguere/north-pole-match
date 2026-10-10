@@ -2,15 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/lib/supabase';
+import { createClientSideSupabaseClient } from '@/lib/supabase';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 
 export default function ProfilePage() {
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientSideSupabaseClient();
 
   useEffect(() => {
     const fetchProfile = async () => {

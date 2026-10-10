@@ -1,20 +1,18 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     
-    // Check if user is logged in
     const {
-      data: { session },
-    } = await supabase.auth.getSession()
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -30,7 +28,7 @@ export async function POST(
     }
 
     // Check if user is the host
-    if (game.host_id !== session.user.id) {
+    if (game.host_id !== user.id) {
       return NextResponse.json({ error: 'Only the host can create matches' }, { status: 403 })
     }
 
